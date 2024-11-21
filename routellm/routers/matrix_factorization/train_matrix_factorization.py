@@ -1,40 +1,39 @@
-import json
-import random
-
 import numpy as np
-import safetensors.torch
+import random
 import torch
-from torch import nn
-from torch.nn import functional as F
+import torch.nn as nn
+import torch.nn.functional as F
 from torch.optim import Adam
 from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
-import safetensors
-
+from openai import OpenAI
+from datasets import load_dataset, concatenate_datasets
+import safetensors.torch
+import json 
 from routellm.routers.matrix_factorization.model import MODEL_IDS
+
+# Initialize the OpenAI API client with your API key
+import os
+from openai import OpenAI
+
+client = OpenAI(
+    api_key=os.getenv("OPENAI_API_KEY"),
+    base_url=os.getenv("OPENAI_BASE_URL"),
+)
 
 torch.manual_seed(42)
 np.random.seed(42)
 random.seed(42)
 
-
 class PairwiseDataset(Dataset):
     def __init__(self, data):
-        # Extract prompts from the list of dictionaries
-        prompts = [sample["prompt"] for sample in data]
-        
-        # Map prompts to their indices
-        self.prompt_to_idx = {prompt: idx for idx, prompt in enumerate(prompts)}
-        
         self.models_a = torch.tensor(
             [MODEL_IDS[sample["model_a"]] for sample in data], dtype=torch.int64
         )
         self.models_b = torch.tensor(
             [MODEL_IDS[sample["model_b"]] for sample in data], dtype=torch.int64
         )
-        self.prompts = torch.tensor(
-            [self.prompt_to_idx[sample["prompt"]] for sample in data], dtype=torch.int64
-        )
+        self.prompts = [sample["prompt"] for sample in data]
         self.winners = [sample["winner"] for sample in data]
 
     def __len__(self):
@@ -50,7 +49,6 @@ class PairwiseDataset(Dataset):
     def get_dataloaders(self, batch_size, shuffle=True):
         return DataLoader(self, batch_size, shuffle=shuffle)
 
-
 class MFModel_Train(torch.nn.Module):
     def __init__(
         self,
@@ -60,16 +58,11 @@ class MFModel_Train(torch.nn.Module):
         text_dim=3584,
         num_classes=1,
         use_proj=True,
-        npy_path=None,
     ):
         super().__init__()
         self.use_proj = use_proj
         self.P = torch.nn.Embedding(num_models, dim)
-        self.Q = torch.nn.Embedding(num_prompts, text_dim).requires_grad_(
-            False
-        )  # When loading the trained ckpt, delete Q, since during test time the prompt embedding is calculated using the OpenAI API
-        embeddings = np.load(npy_path)
-        self.Q.weight.data.copy_(torch.tensor(embeddings))
+        self.prompt_to_embedding = {}  # Store embeddings for each prompt
 
         if self.use_proj:
             self.text_proj = torch.nn.Linear(text_dim, dim, bias=False)
@@ -85,21 +78,28 @@ class MFModel_Train(torch.nn.Module):
     def get_device(self):
         return self.P.weight.device
 
+    def get_prompt_embedding(self, prompt):
+        if prompt not in self.prompt_to_embedding:
+            response = client.embeddings.create(
+                input=[prompt[:3000]],
+                model="BAAI/bge-multilingual-gemma2"
+            )
+            self.prompt_to_embedding[prompt] = torch.tensor(response.data[0].embedding, device=self.get_device())
+        return self.prompt_to_embedding[prompt]
+
     def forward(self, model_win, model_loss, prompt, test=False, alpha=0.05):
         model_win = model_win.to(self.get_device())
         model_loss = model_loss.to(self.get_device())
-        prompt = prompt.to(self.get_device())
 
         model_win_embed = self.P(model_win)
         model_win_embed = F.normalize(model_win_embed, p=2, dim=1)
         model_loss_embed = self.P(model_loss)
         model_loss_embed = F.normalize(model_loss_embed, p=2, dim=1)
-        prompt_embed = self.Q(prompt)
+        prompt_embed = self.get_prompt_embedding(prompt[0])
         if not test:
             # adding noise to stablize the training
             prompt_embed += torch.randn_like(prompt_embed) * alpha
         if self.use_proj:
-            prompt_embed = F.normalize(prompt_embed, p=2, dim=0)
             prompt_embed = self.text_proj(prompt_embed)
 
         return self.classifier(
@@ -110,7 +110,6 @@ class MFModel_Train(torch.nn.Module):
     def predict(self, model_win, model_loss, prompt):
         logits = self.forward(model_win, model_loss, prompt, test=True)
         return logits > 0
-
 
 def evaluator(net, test_iter, device):
     net.eval()
@@ -123,7 +122,7 @@ def evaluator(net, test_iter, device):
             # Assuming devices refer to potential GPU usage
             models_a = models_a.to(device)
             models_b = models_b.to(device)
-            prompts = prompts.to(device)
+            prompts = prompts
 
             logits = net(models_a, models_b, prompts)
             labels = torch.ones_like(logits)
@@ -137,7 +136,6 @@ def evaluator(net, test_iter, device):
 
     net.train()
     return float(sum(ls_list) / num_samples), correct / num_samples
-
 
 def train_loops(
     net,
@@ -161,7 +159,7 @@ def train_loops(
             # Assuming devices refer to potential GPU usage
             models_a = models_a.to(device)
             models_b = models_b.to(device)
-            prompts = prompts.to(device)
+            prompts = prompts
 
             output = net(models_a, models_b, prompts, alpha=alpha)
             ls = loss(output, torch.ones_like(output))
@@ -170,18 +168,9 @@ def train_loops(
             ls.backward()
             optimizer.step()
 
-            # # Log the prompt and the predicted winner
-            # with torch.no_grad():
-            #     predictions = net.predict(models_a, models_b, prompts)
-            #     for i in range(len(models_a)):
-            #         prompt_index = prompts[i].item()  # Convert to Python scalar
-            #         predicted_winner = "model_a" if predictions[i].item() else "model_b"
-            #         print(f"Prompt: {prompt_index}, Predicted Winner: {predicted_winner}")
-
             train_loss_sum += ls.item() * len(models_a)
             n += len(models_a)
         return train_loss_sum / n
-
 
     train_losses = []
     test_losses = []
@@ -218,31 +207,47 @@ def train_loops(
 
     progress_bar.close()
 
-
 if __name__ == "__main__":
-    npy_path = "embedding_lmsys.npy"
-
     dim = 128
-    batch_size = 512
-    num_epochs = 300
+    batch_size = 64
+    num_epochs = 10
     alpha = 0.1
     use_proj = True
     lr = 3e-4
     weight_decay = 1e-5
 
     # load and filter data
-    from datasets import load_dataset
-    data = load_dataset(path="lmsys/lmsys-arena-human-preference-55k", split="train")
+    data_raw = load_dataset(path="lmsys/lmsys-arena-human-preference-55k", split="train").to_pandas()
+    
+#     dataset1 = load_dataset(path="lmsys/lmsys-arena-human-preference-55k", split="train")
+#     dataset2 = load_dataset(path="routellm/gpt4_judge_battles", split="train")
 
-    def determine_winner(sample):
-        if sample["winner_model_a"] == 1:
-            return {"winner": "model_a"}
-        elif sample["winner_model_b"] == 1:
-            return {"winner": "model_b"}
-        else:
-            return {"winner": "model_b"}
+#     # Concatenate the datasets
+#     data_raw = concatenate_datasets([dataset1, dataset2]).to_pandas()
 
-    data = data.map(determine_winner, remove_columns=["winner_model_a", "winner_model_b"])
+    def preprocess_data(battles_df):
+        MIN_LEN = 16
+
+        def get_first_turn(prompt_str):
+            return json.loads(prompt_str)[0].strip()
+
+        def get_winner(row):
+            if row["winner_model_a"] == 1:
+                return "model_a"
+            elif row["winner_model_b"] == 1:
+                return "model_b"
+            else:
+                return "tie"
+
+        battles_df["prompt"] = battles_df["prompt"].apply(get_first_turn)
+        battles_df["winner"] = battles_df.apply(get_winner, axis=1)
+        battles_df = battles_df.loc[battles_df["prompt"].apply(len) >= MIN_LEN]
+        battles_df = battles_df[["prompt","model_a", "model_b", "winner"]]
+
+        return battles_df.to_dict(orient='records')
+    
+    data = preprocess_data(data_raw)
+
     filtered_data = [
         sample
         for sample in data
@@ -265,7 +270,6 @@ if __name__ == "__main__":
         num_models=len(MODEL_IDS),
         num_prompts=len(filtered_data),
         use_proj=use_proj,
-        npy_path=npy_path,
     ).to("cuda")
 
     train_loops(
