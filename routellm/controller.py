@@ -24,7 +24,7 @@ GPT_4_AUGMENTED_CONFIG = {
     },
     "causal_llm": {"checkpoint_path": "routellm/causal_llm_gpt4_augmented"},
     "bert": {"checkpoint_path": "routellm/bert_gpt4_augmented"},
-    "mf": {"checkpoint_path": "routellm/mf_gpt4_augmented"},
+    "mf": {"checkpoint_path": "./model"},
 }
 
 
@@ -51,8 +51,8 @@ class Controller:
     ):
         self.model_pair = ModelPair(strong=strong_model, weak=weak_model)
         self.routers = {}
-        self.api_base = api_base
-        self.api_key = api_key
+        self.api_base = "https://dekallm.cloudeka.ai/v1"
+        self.api_key = "sk-G1_wkZ37sEmY4eqnGdcNig"
         self.model_counts = defaultdict(lambda: defaultdict(int))
         self.progress_bar = progress_bar
 

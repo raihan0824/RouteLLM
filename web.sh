@@ -1,0 +1,1 @@
+python -m examples.router_chat --router mf --threshold 0.49984

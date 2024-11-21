@@ -25,7 +25,7 @@ from routellm.routers.routers import ROUTER_CLS
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 CONTROLLER = None
 
-openai_client = AsyncOpenAI()
+openai_client = AsyncOpenAI(api_key="sk-G1_wkZ37sEmY4eqnGdcNig",base_url="https://dekallm.cloudeka.ai/v1")
 count = defaultdict(lambda: defaultdict(int))
 
 

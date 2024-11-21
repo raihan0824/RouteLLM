@@ -35,6 +35,8 @@ args = parser.parse_args()
 openai_api_key = "EMPTY"
 openai_api_base = args.model_url
 
+print(openai_api_base)
+
 # Create an OpenAI client to interact with the API server
 client = OpenAI(
     api_key=openai_api_key,

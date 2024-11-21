@@ -28,7 +28,7 @@ MODEL_IDS = {
     "gpt-4-0125-preview": 21,
     "gpt-4-0314": 22,
     "gpt-4-0613": 23,
-    "gpt-4-1106-preview": 24,
+    "meta/llama-3.1-405b-instruct": 24,
     "gpt4all-13b-snoozy": 25,
     "guanaco-33b": 26,
     "koala-13b": 27,
@@ -40,7 +40,7 @@ MODEL_IDS = {
     "mistral-7b-instruct": 33,
     "mistral-7b-instruct-v0.2": 34,
     "mistral-medium": 35,
-    "mixtral-8x7b-instruct-v0.1": 36,
+    "qwen/qwen2-vl-7b-instruct": 36,
     "mpt-30b-chat": 37,
     "mpt-7b-chat": 38,
     "nous-hermes-2-mixtral-8x7b-dpo": 39,
@@ -84,8 +84,7 @@ class MFModel(torch.nn.Module, PyTorchModelHubMixin):
         self._name = "TextMF"
         self.use_proj = use_proj
         self.P = torch.nn.Embedding(num_models, dim)
-
-        self.embedding_model = "text-embedding-3-small"
+        self.embedding_model = "baai/bge-multilingual-gemma2"
 
         if self.use_proj:
             self.text_proj = torch.nn.Sequential(
@@ -104,16 +103,16 @@ class MFModel(torch.nn.Module, PyTorchModelHubMixin):
         return self.P.weight.device
 
     def forward(self, model_id, prompt):
-        model_id = torch.tensor(model_id, dtype=torch.long).to(self.get_device())
-
+        model_id = torch.tensor(model_id, dtype=torch.int64).to(self.get_device())
         model_embed = self.P(model_id)
         model_embed = torch.nn.functional.normalize(model_embed, p=2, dim=1)
-
+        
         prompt_embed = (
             OPENAI_CLIENT.embeddings.create(input=[prompt], model=self.embedding_model)
             .data[0]
             .embedding
         )
+        # prompt_embed = torch.tensor(prompt_embed) * (1.15 / torch.tensor(prompt_embed).std())
         prompt_embed = torch.tensor(prompt_embed, device=self.get_device())
         prompt_embed = self.text_proj(prompt_embed)
 
@@ -122,7 +121,9 @@ class MFModel(torch.nn.Module, PyTorchModelHubMixin):
     @torch.no_grad()
     def pred_win_rate(self, model_a, model_b, prompt):
         logits = self.forward([model_a, model_b], prompt)
+        print("logits:",logits)
         winrate = torch.sigmoid(logits[0] - logits[1]).item()
+        print("winrate:",winrate)
         return winrate
 
     def load(self, path):

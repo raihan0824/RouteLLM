@@ -154,7 +154,7 @@ class SWRankingRouter(Router):
             for dataset in arena_embedding_datasets
         ]
         self.arena_conv_embedding = np.concatenate(embeddings)
-        self.embedding_model = "text-embedding-3-small"
+        self.embedding_model = "baai/bge-multilingual-gemma2"
 
         assert len(self.arena_df) == len(
             self.arena_conv_embedding
@@ -191,7 +191,7 @@ class SWRankingRouter(Router):
             np.linalg.norm(self.arena_conv_embedding, axis=1)
             * np.linalg.norm(prompt_emb)
         )
-
+        print(similarities)
         weightings = self.get_weightings(similarities)
         res = compute_elo_mle_with_tie(self.arena_df, sample_weight=weightings)
 
@@ -201,7 +201,7 @@ class SWRankingRouter(Router):
         )
         weak_winrate = 1 / (1 + 10 ** ((strong_score - weak_score) / 400))
         strong_winrate = 1 - weak_winrate
-
+        print("strong_winrate:",strong_winrate)
         # If the expected strong winrate is greater than the threshold, use strong
         return strong_winrate
 
@@ -213,18 +213,18 @@ class MatrixFactorizationRouter(Router):
         checkpoint_path,
         # This is the model pair for scoring at inference time,
         # and can be different from the model pair used for routing.
-        strong_model="gpt-4-1106-preview",
-        weak_model="mixtral-8x7b-instruct-v0.1",
+        strong_model="meta/llama-3.1-405b-instruct",
+        weak_model="qwen/qwen2-vl-7b-instruct",
         hidden_size=128,
         num_models=64,
-        text_dim=1536,
+        text_dim=3584,
         num_classes=1,
         use_proj=True,
     ):
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         self.model = MFModel.from_pretrained(
-            checkpoint_path,
+            "model",
             dim=hidden_size,
             num_models=num_models,
             text_dim=text_dim,

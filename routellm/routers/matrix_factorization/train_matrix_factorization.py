@@ -2,12 +2,14 @@ import json
 import random
 
 import numpy as np
+import safetensors.torch
 import torch
 from torch import nn
 from torch.nn import functional as F
 from torch.optim import Adam
 from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
+import safetensors
 
 from routellm.routers.matrix_factorization.model import MODEL_IDS
 
@@ -18,13 +20,21 @@ random.seed(42)
 
 class PairwiseDataset(Dataset):
     def __init__(self, data):
+        # Extract prompts from the list of dictionaries
+        prompts = [sample["prompt"] for sample in data]
+        
+        # Map prompts to their indices
+        self.prompt_to_idx = {prompt: idx for idx, prompt in enumerate(prompts)}
+        
         self.models_a = torch.tensor(
             [MODEL_IDS[sample["model_a"]] for sample in data], dtype=torch.int64
         )
         self.models_b = torch.tensor(
             [MODEL_IDS[sample["model_b"]] for sample in data], dtype=torch.int64
         )
-        self.prompt_id = [sample["idx"] for sample in data]
+        self.prompts = torch.tensor(
+            [self.prompt_to_idx[sample["prompt"]] for sample in data], dtype=torch.int64
+        )
         self.winners = [sample["winner"] for sample in data]
 
     def __len__(self):
@@ -33,9 +43,9 @@ class PairwiseDataset(Dataset):
     def __getitem__(self, index):
         assert self.winners[index] in ["model_a", "model_b"], self.winners[index]
         if self.winners[index] == "model_a":
-            return self.models_a[index], self.models_b[index], self.prompt_id[index]
+            return self.models_a[index], self.models_b[index], self.prompts[index]
         else:
-            return self.models_b[index], self.models_a[index], self.prompt_id[index]
+            return self.models_b[index], self.models_a[index], self.prompts[index]
 
     def get_dataloaders(self, batch_size, shuffle=True):
         return DataLoader(self, batch_size, shuffle=shuffle)
@@ -47,7 +57,7 @@ class MFModel_Train(torch.nn.Module):
         dim,
         num_models,
         num_prompts,
-        text_dim=1536,
+        text_dim=3584,
         num_classes=1,
         use_proj=True,
         npy_path=None,
@@ -89,6 +99,7 @@ class MFModel_Train(torch.nn.Module):
             # adding noise to stablize the training
             prompt_embed += torch.randn_like(prompt_embed) * alpha
         if self.use_proj:
+            prompt_embed = F.normalize(prompt_embed, p=2, dim=0)
             prompt_embed = self.text_proj(prompt_embed)
 
         return self.classifier(
@@ -159,9 +170,18 @@ def train_loops(
             ls.backward()
             optimizer.step()
 
+            # # Log the prompt and the predicted winner
+            # with torch.no_grad():
+            #     predictions = net.predict(models_a, models_b, prompts)
+            #     for i in range(len(models_a)):
+            #         prompt_index = prompts[i].item()  # Convert to Python scalar
+            #         predicted_winner = "model_a" if predictions[i].item() else "model_b"
+            #         print(f"Prompt: {prompt_index}, Predicted Winner: {predicted_winner}")
+
             train_loss_sum += ls.item() * len(models_a)
             n += len(models_a)
         return train_loss_sum / n
+
 
     train_losses = []
     test_losses = []
@@ -200,28 +220,35 @@ def train_loops(
 
 
 if __name__ == "__main__":
-    # an example of training the model
-    json_path = "/path/to/pairwise_data.json"
-    npy_path = "/path/to/prompt/embedding.npy"
+    npy_path = "embedding_lmsys.npy"
 
     dim = 128
-    batch_size = 64
-    num_epochs = 100
+    batch_size = 512
+    num_epochs = 300
     alpha = 0.1
     use_proj = True
     lr = 3e-4
     weight_decay = 1e-5
 
     # load and filter data
-    data = json.load(open(json_path, "r"))
+    from datasets import load_dataset
+    data = load_dataset(path="lmsys/lmsys-arena-human-preference-55k", split="train")
 
+    def determine_winner(sample):
+        if sample["winner_model_a"] == 1:
+            return {"winner": "model_a"}
+        elif sample["winner_model_b"] == 1:
+            return {"winner": "model_b"}
+        else:
+            return {"winner": "model_b"}
+
+    data = data.map(determine_winner, remove_columns=["winner_model_a", "winner_model_b"])
     filtered_data = [
         sample
         for sample in data
         if sample["winner"] in ["model_a", "model_b"]
         and sample["model_a"] != sample["model_b"]
     ]
-
     # shuffle and prepare train test split
     data_shuffled = filtered_data.copy()
     random.shuffle(data_shuffled)
@@ -236,7 +263,7 @@ if __name__ == "__main__":
     model = MFModel_Train(
         dim=dim,
         num_models=len(MODEL_IDS),
-        num_prompts=len(data),
+        num_prompts=len(filtered_data),
         use_proj=use_proj,
         npy_path=npy_path,
     ).to("cuda")
@@ -251,3 +278,4 @@ if __name__ == "__main__":
         num_epochs=num_epochs,
         device="cuda",
     )
+    safetensors.torch.save_file(model.state_dict(), "model.safetensors")

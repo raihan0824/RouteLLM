@@ -44,9 +44,7 @@ if __name__ == "__main__":
                 battles_df["prompt"].apply(lambda x: json.loads(x)[0]), router
             )
             battles_df[str(router)] = win_rates
-            Dataset.from_pandas(battles_df).push_to_hub(
-                "routellm/lmsys-arena-human-preference-55k-thresholds"
-            )
+            battles_df.to_csv("lmsys-arena-human-preference-55k-thresholds.csv", index=False)
     elif args.task == "calibrate":
         thresholds_df = load_dataset(
             "routellm/lmsys-arena-human-preference-55k-thresholds", split="train"

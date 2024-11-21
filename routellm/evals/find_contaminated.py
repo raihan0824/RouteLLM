@@ -20,7 +20,7 @@ def check_data_contamination_similarity(train_embeddings, eval_prompts):
     for eval_idx in tqdm.tqdm(range(0, len(eval_prompts), batch_size)):
         prompts = eval_prompts[eval_idx : eval_idx + batch_size]
         responses = client.embeddings.create(
-            input=prompts, model="text-embedding-3-small"
+            input=prompts, model="baai/bge-multilingual-gemma2"
         ).data
         eval_embeddings.extend([data.embedding for data in responses])
 

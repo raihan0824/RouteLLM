@@ -10,4 +10,4 @@ causal_llm:
 bert:
     checkpoint_path: routellm/bert_gpt4_augmented
 mf:
-    checkpoint_path: routellm/mf_gpt4_augmented
+    checkpoint_path: ./model

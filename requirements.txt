@@ -1,0 +1,11 @@
+	pyyaml
+	pydantic
+	numpy
+	pandas
+	torch
+	scikit-learn
+	tqdm
+	openai
+	transformers
+	datasets
+	litellm

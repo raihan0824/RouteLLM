@@ -18,7 +18,7 @@ def get_embeddings(battles_df):
     )
 
     client = openai.OpenAI(
-        api_key=os.environ["OPENAI_API_KEY"], base_url="https://api.openai.com/v1"
+        api_key="sk-G1_wkZ37sEmY4eqnGdcNig", base_url="https://dekallm.cloudeka.ai/v1 "
     )
 
     batch_size = 2000
@@ -28,7 +28,7 @@ def get_embeddings(battles_df):
     for i in tqdm.tqdm(range(0, len(user_prompts), batch_size)):
         battles = user_prompts[i : i + batch_size]
         responses = client.embeddings.create(
-            input=battles, model="text-embedding-3-small"
+            input=battles, model="baai/bge-multilingual-gemma2"
         ).data
         embeddings.extend([data.embedding for data in responses])
     embeddings = torch.tensor(embeddings)
