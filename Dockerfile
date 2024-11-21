@@ -4,12 +4,15 @@ FROM python:3.10-slim
 # Set the working directory in the container
 WORKDIR /app
 
-# Copy the current directory contents into the container at /app
-COPY . /app
+# Copy only the requirements file first to leverage Docker cache
+COPY requirements.txt /app/requirements.txt
 
 # Install any needed packages specified in requirements.txt
 RUN pip install --upgrade pip
 RUN pip install -r requirements.txt
+
+# Copy the rest of the application code
+COPY . /app
 
 # Set environment variables
 ENV OPENAI_API_KEY=sk-G1_wkZ37sEmY4eqnGdcNig
@@ -18,5 +21,11 @@ ENV OPENAI_BASE_URL=https://dekallm.cloudeka.ai/v1
 # Expose the port the app runs on
 EXPOSE 6060
 
-# Run the application
-CMD ["python", "-m", "routellm.openai_server", "--routers", "mf", "--strong-model", "openai/qwen/qwen2-vl-72b-instruct", "--weak-model", "openai/gotocompany/gemma2-9b-cpt-sahabatai-v1-instruct"]
+# Copy the start script into the container
+COPY start.sh /app/start.sh
+
+# Make the start script executable
+RUN chmod +x /app/start.sh
+
+# Run the start script
+CMD ["/app/start.sh"]

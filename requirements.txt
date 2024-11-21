@@ -9,3 +9,7 @@
 	transformers
 	datasets
 	litellm
+	fastapi
+	shortuuid
+	uvicorn
+	gradio
