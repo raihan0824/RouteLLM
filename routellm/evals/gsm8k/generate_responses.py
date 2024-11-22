@@ -18,7 +18,7 @@ https://github.com/sgl-project/sglang/blob/main/benchmark/gsm8k/bench_sglang.py
 
 INVALID = -9999999
 ROUTED_PAIR = ModelPair(
-    strong="gpt-4-1106-preview", weak="mistralai/Mixtral-8x7B-Instruct-v0.1"
+    strong="openai/meta/llama-3.1-405b-instruct", weak="openai/qwen/qwen2-vl-7b-instruct"
 )
 
 

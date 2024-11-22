@@ -180,11 +180,11 @@ if __name__ == "__main__":
         default=psutil.cpu_count(logical=False),
         help="Number of cores to use, all by default.",
     )
-    parser.add_argument("--strong-model", type=str, default="gpt-4-1106-preview")
+    parser.add_argument("--strong-model", type=str, default="meta/llama-3.1-405b-instruct")
     parser.add_argument(
         "--weak-model",
         type=str,
-        default="mistralai/Mixtral-8x7B-Instruct-v0.1",
+        default="qwen/qwen2-vl-7b-instruct",
     )
     parser.add_argument("--config", type=str, default=None)
     parser.add_argument("--num-results", type=int, default=10)
@@ -267,6 +267,6 @@ if __name__ == "__main__":
         all_results,
         benchmark,
         args.benchmark,
-        controller.model_pair.strong,
+        controller.model_pair,
         args.output,
     )
