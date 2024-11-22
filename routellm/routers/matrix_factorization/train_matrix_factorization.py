@@ -82,7 +82,7 @@ class MFModel_Train(torch.nn.Module):
         if prompt not in self.prompt_to_embedding:
             response = client.embeddings.create(
                 input=[prompt[:3000]],
-                model="BAAI/bge-multilingual-gemma2"
+                model="baai/bge-multilingual-gemma2"
             )
             self.prompt_to_embedding[prompt] = torch.tensor(response.data[0].embedding, device=self.get_device())
         return self.prompt_to_embedding[prompt]
