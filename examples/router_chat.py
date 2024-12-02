@@ -97,4 +97,4 @@ gr.ChatInterface(
         gr.Textbox(label="Router", value=args.router),
         gr.Slider(label="Temperature", minimum=0, maximum=1, value=args.temp, step=0.1),
     ],
-).queue().launch(server_name=args.host, server_port=args.port, share=True)
+).queue().launch(server_name=args.host, server_port=args.port, share=False)

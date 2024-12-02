@@ -184,6 +184,22 @@ args = parser.parse_args()
 if args.verbose:
     logging.basicConfig(level=logging.INFO)
 
+@app.get("/v1/models")
+async def get_openai_models(
+    url_idx: Optional[int] = None,
+):
+    return {
+        "data": [
+            {
+                "id": "router-mf-0.5",
+                "object": "model",
+                "created": int(time.time()),
+                "owned_by": "lintasarta",
+            }
+        ],
+        "object": "list",
+    }
+
 if __name__ == "__main__":
     print("Launching server with routers:", args.routers)
     uvicorn.run(

@@ -110,7 +110,7 @@ class MFModel(torch.nn.Module, PyTorchModelHubMixin):
         model_embed = torch.nn.functional.normalize(model_embed, p=2, dim=1)
         
         prompt_embed = (
-            OPENAI_CLIENT.embeddings.create(input=[prompt], model=self.embedding_model)
+            OPENAI_CLIENT.embeddings.create(input=[prompt[:3000]], model=self.embedding_model)
             .data[0]
             .embedding
         )
@@ -123,9 +123,8 @@ class MFModel(torch.nn.Module, PyTorchModelHubMixin):
     @torch.no_grad()
     def pred_win_rate(self, model_a, model_b, prompt):
         logits = self.forward([model_a, model_b], prompt)
-        print("logits:",logits)
         winrate = torch.sigmoid(logits[0] - logits[1]).item()
-        print("winrate:",winrate)
+        print(f"winrate: {winrate}")
         return winrate
 
     def load(self, path):

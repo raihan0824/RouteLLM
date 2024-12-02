@@ -9,6 +9,7 @@ from tqdm import tqdm
 from routellm.controller import Controller
 from routellm.routers.routers import ROUTER_CLS
 
+import pandas as pd
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -35,7 +36,7 @@ if __name__ == "__main__":
             routers=args.routers,
             config=yaml.safe_load(open(args.config, "r")) if args.config else None,
             # This is not needed since we only calculate the win rate
-            routed_pair=None,
+            # routed_pair=None,
             progress_bar=True,
         )
 
@@ -46,9 +47,7 @@ if __name__ == "__main__":
             battles_df[str(router)] = win_rates
             battles_df.to_csv("lmsys-arena-human-preference-55k-thresholds.csv", index=False)
     elif args.task == "calibrate":
-        thresholds_df = load_dataset(
-            "routellm/lmsys-arena-human-preference-55k-thresholds", split="train"
-        ).to_pandas()
+        thresholds_df = pd.read_csv("lmsys-arena-human-preference-55k-thresholds.csv")
         for router in args.routers:
             threshold = thresholds_df[router].quantile(q=1 - args.strong_model_pct)
             print(

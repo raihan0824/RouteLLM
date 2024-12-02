@@ -42,8 +42,8 @@ class Controller:
     def __init__(
         self,
         routers: list[str],
-        strong_model: str,
-        weak_model: str,
+        strong_model: str = "meta/llama-3.1-405b-instruct",
+        weak_model: str = "qwen/qwen2-vl-7b-instruct",
         config: Optional[dict[str, dict[str, Any]]] = None,
         api_base: Optional[str] = None,
         api_key: Optional[str] = None,
